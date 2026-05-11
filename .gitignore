@@ -1,0 +1,12 @@
+# Models
+final_model/
+best_model/
+
+# Predictions output
+predictions/masks/
+predictions/overlays/
+
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
