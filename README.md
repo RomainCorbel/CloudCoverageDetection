@@ -1,64 +1,113 @@
 # Cloud Segmentation — Sky-Image Dataset
 
-Fine-tunes a U-Net (pretrained ImageNet) for binary cloud/sky segmentation,
-then computes the cloud coverage percentage on new images.
+Fine-tunes a U-Net (pretrained on ImageNet) for binary cloud/sky segmentation,
+then computes cloud coverage percentage on new images.
 
 ## Setup
+
+### 1 — Install PyTorch with CUDA support
+
+Your RTX 40/50-series GPU requires PyTorch built against **CUDA 12.8**:
+
+```bash
+pip install torch torchvision --index-url https://download.pytorch.org/whl/cu128
+```
+
+> If you have an older NVIDIA GPU (RTX 20/30-series), use `cu121` instead of `cu128`.
+
+### 2 — Install remaining dependencies
 
 ```bash
 pip install -r requirements.txt
 ```
 
+### Verify GPU is detected
+
+```bash
+python -c "import torch; print(torch.cuda.is_available(), torch.cuda.get_device_name(0))"
+# Expected: True  NVIDIA GeForce RTX 5060 Laptop GPU
+```
+
 ## Dataset structure
 
-The scripts expect:
+The scripts are designed for the SWIMSEG sky-image dataset layout (located at
+`../dataset` relative to this project):
 
 ```
 dataset/
-    images/
-        img001.jpg
-        img002.jpg
-        ...
-    masks/
-        img001.png      # 0 = sky, 255 (or 1) = cloud
-        img002.png
-        ...
+    train/              ← 861 training images   (.png)
+    train_labels/       ← 861 training masks    (.png)
+    val/                ← 101 validation images (.png)
+    val_labels/         ← 101 validation masks  (.png)
+    test/               ←  51 test images       (.png)
+    test_labels/        ←  51 test masks        (.png)
+    class_dict.csv      ← cloud=(0,0,0) black | nocloud=(255,255,255) white
 ```
 
-Image and mask filenames must share the same stem (`img001.jpg` ↔ `img001.png`).
-If your dataset uses different folder names, pass `--images_subdir` and
-`--masks_subdir`.
+**Mask convention** (`class_dict.csv`):
+- `black (0, 0, 0)` = **cloud** → label 1
+- `white (255, 255, 255)` = **sky** → label 0
 
-If your masks have a different convention (different file structure, multi-class,
-etc.), the only thing to adjust is the `CloudDataset.__getitem__` method in
-`train.py`, line where masks are binarized:
+Image and mask filenames share the same stem (`0001.png` ↔ `0001.png`).
+
+### Using a different dataset
+
+Pass custom sub-directory names to override the defaults:
+```bash
+python train.py --data_dir /path/to/data \
+                --train_subdir images \
+                --masks_subdir masks \
+                --val_subdir val_images \
+                --val_labels_subdir val_masks
+```
+
+If `val_subdir` does not exist, a random split is made from the training set
+(controlled by `--val_ratio`, default 0.2).
+
+If your masks use a different colour convention (e.g. white=cloud), adjust the
+single binarisation line in `train.py` inside `CloudDataset.__getitem__`:
 ```python
+# current (black=cloud):
+mask = (mask < 128).astype(np.float32)
+
+# for white=cloud datasets:
 mask = (mask > 127).astype(np.float32)
 ```
 
 ## Training
 
 ```bash
-python train.py --data_dir /path/to/dataset --epochs 30 --batch_size 8
+python train.py --data_dir ../dataset --epochs 30 --batch_size 8
 ```
 
-Useful flags:
-- `--lr 1e-4` (default, good starting point)
-- `--val_ratio 0.2` (80/20 train/val split)
-- `--device cuda|mps|cpu` (auto-detected by default)
+Key flags:
+| Flag | Default | Description |
+|---|---|---|
+| `--data_dir` | *(required)* | Root dataset directory |
+| `--train_subdir` | `train` | Sub-folder with training images |
+| `--masks_subdir` | `train_labels` | Sub-folder with training masks |
+| `--val_subdir` | `val` | Sub-folder with validation images |
+| `--val_labels_subdir` | `val_labels` | Sub-folder with validation masks |
+| `--epochs` | `30` | Number of training epochs |
+| `--batch_size` | `8` | Batch size |
+| `--image_size` | `384` | Resize images to this square size |
+| `--lr` | `1e-4` | Learning rate |
+| `--val_ratio` | `0.2` | Val fraction when no val_subdir found |
+| `--output_dir` | `./checkpoints` | Where to save model checkpoints |
+| `--device` | auto | `cuda` \| `mps` \| `cpu` |
 
-Checkpoints go to `./checkpoints/best_model.pth` (best val IoU) and
-`./checkpoints/final_model.pth` (last epoch).
+Checkpoints saved to:
+- `checkpoints/best_model.pth` — best validation IoU
+- `checkpoints/final_model.pth` — last epoch
 
 ### Switching model architecture
 
-Edit `MODEL_CONFIG` at the top of `train.py`. Anything from
-`segmentation_models_pytorch` works:
+Edit `MODEL_CONFIG` at the top of `train.py`:
 
 ```python
 MODEL_CONFIG = {
-    "architecture": "DeepLabV3Plus",         # or UnetPlusPlus, FPN, Linknet, ...
-    "encoder_name": "efficientnet-b0",       # or resnet50, mobilenet_v2, ...
+    "architecture":    "DeepLabV3Plus",   # Unet | UnetPlusPlus | FPN | Linknet
+    "encoder_name":    "efficientnet-b0", # resnet50 | mobilenet_v2 | ...
     "encoder_weights": "imagenet",
     ...
 }
@@ -66,30 +115,68 @@ MODEL_CONFIG = {
 
 ## Inference — compute cloud coverage
 
-Single image:
+### Single image
+
 ```bash
 python predict.py --checkpoint checkpoints/best_model.pth --input photo.jpg
 ```
 
-Whole directory (recursive):
+### Whole directory
+
 ```bash
 python predict.py --checkpoint checkpoints/best_model.pth \
-                  --input /path/to/images \
+                  --input ../dataset/test \
                   --output_dir ./predictions
 ```
 
-Outputs in `./predictions/`:
-- `masks/` — binary masks (PNG, 0/255)
-- `overlays/` — original image with cloud mask in red + coverage annotation
-- `coverage_report.csv` — per-image coverage percentages
+### Test set evaluation (with ground-truth masks)
+
+```bash
+python predict.py --checkpoint checkpoints/best_model.pth \
+                  --input ../dataset/test \
+                  --labels_dir ../dataset/test_labels \
+                  --output_dir ./predictions
+```
+
+When `--labels_dir` is provided, per-image **IoU** and **Dice** scores are
+computed and included in the CSV report, and mean/min/max metrics are printed at
+the end.
+
+### Inference flags
+
+| Flag | Default | Description |
+|---|---|---|
+| `--checkpoint` | *(required)* | Path to `.pth` checkpoint |
+| `--input` | *(required)* | Image file or directory |
+| `--labels_dir` | `None` | Ground-truth mask directory for evaluation |
+| `--output_dir` | `./predictions` | Where to save results |
+| `--threshold` | `0.5` | Probability threshold for cloud pixels |
+| `--no_overlay` | off | Disable saving overlay visualisations |
+| `--no_mask` | off | Disable saving raw binary mask PNGs |
+| `--device` | auto | `cuda` \| `mps` \| `cpu` |
+
+### Outputs in `./predictions/`
+
+```
+predictions/
+├── masks/
+│   ├── 0913_mask.png      ← binary mask (0 = sky, 255 = cloud)
+│   └── ...
+├── overlays/
+│   ├── 0913_overlay.jpg   ← original image + red cloud overlay
+│   └── ...
+└── coverage_report.csv    ← per-image coverage % (+ IoU/Dice if --labels_dir given)
+```
 
 ## Notes
 
-- **All-sky cameras with circular field of view**: the model will also segment
-  the black border as "sky". To get accurate coverage, mask out the black ring
-  first (or pass a `valid_region` mask in `cloud_coverage()` — see the function
-  signature in `predict.py`).
+- **Windows**: `num_workers` is automatically set to 0 to avoid multiprocessing
+  issues. Training is otherwise identical to Linux/macOS.
 - **CPU-only**: training works but is slow. Reduce `--batch_size 4` and
-  `image_size` (in `TRAIN_CONFIG`) to 256 if needed. Inference is fine on CPU.
-- **Small dataset**: with <500 images, increase augmentation strength or train
-  fewer epochs to avoid overfitting. Monitor val IoU — if it plateaus, stop.
+  `--image_size 256` if needed. Inference is fast on CPU.
+- **All-sky cameras**: if your images have a circular field of view, the black
+  border may be predicted as sky. Pass a `valid_region` binary mask to
+  `cloud_coverage()` in `predict.py` to restrict the coverage calculation to the
+  circular sky region.
+- **Small datasets** (< 500 images): increase augmentation strength or train
+  fewer epochs to avoid overfitting. Monitor val IoU — stop if it plateaus.
