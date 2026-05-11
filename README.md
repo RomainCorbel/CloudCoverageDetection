@@ -151,20 +151,20 @@ Each pair shows the original sky photo on the left and the predicted binary mask
 
 **~20 % coverage**
 
-[alt text](predictions/overlays/0914_viz.jpg)
+![alt text](predictions/overlays/0914_viz.jpg)
 
 **~34 % coverage**
 
-[alt text](predictions/overlays/0916_viz.jpg)
+![alt text](predictions/overlays/0916_viz.jpg)
 
 **~62 % coverage**
 
-[alt text](predictions/overlays/0970_viz.jpg)
+![alt text](predictions/overlays/0970_viz.jpg)
 
 **~86 % coverage**
 
-[alt text](predictions/overlays/0957_viz.jpg)
+![alt text](predictions/overlays/0957_viz.jpg)
 
 **~100 % coverage**
 
-[alt text](predictions/overlays/0963_viz.jpg)
+![alt text](predictions/overlays/0963_viz.jpg)
