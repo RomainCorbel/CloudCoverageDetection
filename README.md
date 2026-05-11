@@ -139,9 +139,32 @@ predictions/
 └── coverage_report.csv     # per-image coverage % (+ IoU/Dice if --labels_dir given)
 ```
 
-## Notes
+## Results
 
-- **Windows** — `num_workers` is automatically set to 0 to avoid multiprocessing issues.
-- **CPU-only** — training works but is slow; reduce `--batch_size 4` and `--image_size 256` if needed. Inference is fast on CPU.
-- **All-sky cameras** — if images have a circular field of view, the black border may be predicted as cloud. Pass a `valid_region` binary mask to `cloud_coverage()` in [predict.py](predict.py) to restrict the calculation to the circular sky region.
-- **Small datasets** (< 500 images) — consider heavier augmentation or fewer epochs to avoid overfitting; monitor val IoU and stop early if it plateaus.
+### Training curves
+
+![Training curves](checkpoints/training_curves.png)
+
+### Sample predictions (input image · predicted mask)
+
+Each pair shows the original sky photo on the left and the predicted binary mask on the right (black = cloud, white = sky).
+
+**~20 % coverage**
+
+![0914](predictions/overlays/0914_viz.jpg)
+
+**~34 % coverage**
+
+![0916](predictions/overlays/0916_viz.jpg)
+
+**~62 % coverage**
+
+![0970](predictions/overlays/0970_viz.jpg)
+
+**~86 % coverage**
+
+![0957](predictions/overlays/0957_viz.jpg)
+
+**~100 % coverage**
+
+![0963](predictions/overlays/0963_viz.jpg)
