@@ -6,7 +6,8 @@ best_model/
 predictions/masks/
 # predictions/overlays/
 
-# Python
+# PythonZ
 __pycache__/
 *.py[cod]
 *.pyo
+.claude/
